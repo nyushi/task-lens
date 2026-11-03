@@ -1,1 +1,1 @@
-{"input":{"plugin":"adapters:DemoInput"},"transform":{"plugin":"transforms:FixtureTransform"},"mode":"ダミーデータ","interval":120}
+{"input":{"plugin":"demo"},"transform":{"plugin":"fixture"},"mode":"ダミーデータ","interval":120}

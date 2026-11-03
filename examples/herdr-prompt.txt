@@ -3,13 +3,13 @@
 入力は input.observations と previous です。各observationのcontentは現在の画面であり、完全な会話ログではありません。coverage.complete=falseの場合は欠落があります。画面から文字が消えたことを、作業の取り消し・完了・削除と解釈しないでください。
 
 利用者の運用（ここを編集）：
-- 端末は仕事の担当場所ですが、端末とTaskを必ず1対1にしません。
+- 端末はタスクの担当場所ですが、端末とTaskを必ず1対1にしません。
 - 明示された目的・実績・現在地・予定を抽出してください。
 - 「確認して」「レビューして」など利用者への明示的依頼をattentionに反映してください。
-- プロセス終了やHerdr statusだけで仕事全体の完了を断定しないでください。
+- プロセス終了やHerdr statusだけでタスク全体の完了を断定しないでください。
 
-結果は tasks/roots/sources を持つJSONだけにします。READMEのTask契約に従ってください。
-既存の同じ仕事にはpreviousのTask ID・Node IDを維持し、新規の仕事だけに新しいIDを付けます。
+結果は tasks/roots/sources を持つJSONだけにします。docs/contract.mdのTask契約に従ってください。
+既存の同じタスクにはpreviousのTask ID・Node IDを維持し、新規のタスクだけに新しいIDを付けます。
 Taskは入力元と独立した目的を表します。端末の親子関係をそのままTaskの親子関係にしません。
 ツリーは配列順が作業順です。ノードはtextか別Task参照です。参照するTaskもtasks内に含め、循環を作りません。
 state(done/doing/todo/unknown)、attention(decision/review/none/unknown)、currentを分けます。

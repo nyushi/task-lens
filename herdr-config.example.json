@@ -1,1 +1,1 @@
-{"input":{"plugin":"adapters:HerdrInput","options":{"socket":"/replace/with/herdr.sock","terminals":["explicit-terminal-address"]}},"transform":{"plugin":"transforms:ObservationsOnly"},"mode":"読み取り専用","interval":120}
+{"input":{"plugin":"herdr","options":{"socket":"/path/to/core.sock","terminals":["selected-address"]}},"transform":{"plugin":"observations"},"mode":"読み取り専用","interval":120}

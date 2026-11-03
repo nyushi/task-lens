@@ -1,1 +1,1 @@
-{"input":{"plugin":"adapters:RecordedTaskInput","options":{"path":"fixtures/codex-dummy-result.json"}},"transform":{"plugin":"transforms:FixtureTransform"},"mode":"ダミー · Codex結果の再表示","interval":120}
+{"input":{"plugin":"recorded","options":{"path":"fixtures/codex-dummy-result.json"}},"transform":{"plugin":"fixture"},"mode":"ダミー · 保存結果","interval":120}

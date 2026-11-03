@@ -13,3 +13,7 @@ state/
 evidence/*
 !evidence/hc.openrpc.json
 !evidence/LICENSE-herdr-core
+
+/task-lens
+/dist/
+*.local.json
