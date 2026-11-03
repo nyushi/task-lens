@@ -1,0 +1,78 @@
+{
+  "tasks": {
+    "search-speed": {
+      "id": "search-speed",
+      "purpose": "検索の速度改善",
+      "state": "doing",
+      "attention": "decision",
+      "tree": [
+        {
+          "id": "step-1",
+          "state": "done",
+          "attention": "none",
+          "current": false,
+          "sourceRefs": [
+            "herdr:example-terminal"
+          ],
+          "content": {
+            "kind": "text",
+            "text": "遅延を再現"
+          },
+          "children": []
+        },
+        {
+          "id": "step-2",
+          "state": "doing",
+          "attention": "decision",
+          "current": true,
+          "sourceRefs": [
+            "herdr:example-terminal"
+          ],
+          "content": {
+            "kind": "text",
+            "text": "キャッシュ保持時間を決める"
+          },
+          "children": []
+        },
+        {
+          "id": "step-3",
+          "state": "todo",
+          "attention": "none",
+          "current": false,
+          "sourceRefs": [
+            "herdr:example-terminal"
+          ],
+          "content": {
+            "kind": "text",
+            "text": "キャッシュを実装"
+          },
+          "children": []
+        }
+      ]
+    }
+  },
+  "roots": [
+    "search-speed"
+  ],
+  "sources": {
+    "herdr:example-terminal": {
+      "id": "herdr:example-terminal",
+      "label": "架空の担当",
+      "revision": 3,
+      "epoch": 0,
+      "observedAt": 1800000000,
+      "content": "架空例。検索の遅延を再現済み。キャッシュ保持時間30秒か60秒かの判断待ち。次にキャッシュを実装する予定。",
+      "coverage": {
+        "complete": false,
+        "how": "screen",
+        "why": "synthetic example"
+      },
+      "metadata": {
+        "address": "example-terminal",
+        "status": {
+          "state": "blocked"
+        }
+      }
+    }
+  }
+}

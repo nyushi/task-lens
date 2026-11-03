@@ -1,0 +1,80 @@
+{
+  "tasks": {
+    "codex-dummy-task": {
+      "id": "codex-dummy-task",
+      "purpose": "検索画面の速度改善",
+      "state": "doing",
+      "attention": "decision",
+      "tree": [
+        {
+          "id": "dummy-search-reproduce",
+          "state": "done",
+          "attention": "none",
+          "current": false,
+          "content": {
+            "kind": "text",
+            "text": "遅延の再現"
+          },
+          "sourceRefs": [
+            "synthetic-input"
+          ],
+          "children": []
+        },
+        {
+          "id": "dummy-search-cache-duration",
+          "state": "doing",
+          "attention": "decision",
+          "current": true,
+          "content": {
+            "kind": "text",
+            "text": "キャッシュの保持時間を30秒か60秒か、利用者の判断待ち"
+          },
+          "sourceRefs": [
+            "synthetic-input"
+          ],
+          "children": []
+        },
+        {
+          "id": "dummy-search-implement-cache",
+          "state": "todo",
+          "attention": "none",
+          "current": false,
+          "content": {
+            "kind": "text",
+            "text": "方針決定後にキャッシュを実装"
+          },
+          "sourceRefs": [
+            "synthetic-input"
+          ],
+          "children": []
+        },
+        {
+          "id": "dummy-search-measure-response",
+          "state": "todo",
+          "attention": "none",
+          "current": false,
+          "content": {
+            "kind": "text",
+            "text": "応答時間を測定"
+          },
+          "sourceRefs": [
+            "synthetic-input"
+          ],
+          "children": []
+        }
+      ]
+    }
+  },
+  "roots": [
+    "codex-dummy-task"
+  ],
+  "sources": {
+    "synthetic-input": {
+      "id": "synthetic-input",
+      "content": "{\"connected\": true, \"observations\": [{\"id\": \"dummy-search\", \"content\": \"架空のテスト用記録。目的は検索画面の速度改善。遅延の再現は完了。現在はキャッシュの保持時間を決める段階で、利用者に30秒か60秒かの判断を求めている。方針決定後にキャッシュを実装し、応答時間を測定する予定。\"}]}",
+      "coverage": {
+        "complete": true
+      }
+    }
+  }
+}

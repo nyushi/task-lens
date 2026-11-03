@@ -1,0 +1,1 @@
+{"input":{"plugin":"adapters:DemoInput"},"transform":{"plugin":"transforms:CommandTransform","options":{"command":"python3","argv":["fixtures/transform.py"],"prompt_file":"fixtures/prompt.txt","timeout":5}},"mode":"ダミーデータ · ローカルCLI","interval":120}

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+*.log
+state/
+.DS_Store
+
+.tools/
+.runtime/
+
+# Local verification records and screenshots are not published.
+evidence/*
+!evidence/hc.openrpc.json
+!evidence/LICENSE-herdr-core
