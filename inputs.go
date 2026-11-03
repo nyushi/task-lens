@@ -64,7 +64,7 @@ func (FixtureTransform) Convert(_ context.Context, b Batch, _ Snapshot) (Result,
 
 type ObservationsOnly struct{}
 
-func (ObservationsOnly) Convert(_ context.Context, b Batch, _ Snapshot) (Result, error) {
+func (ObservationsOnly) Convert(_ context.Context, b Batch, previous Snapshot) (Result, error) {
 	r := Result{Tasks: map[string]Task{}, Roots: []string{}, Sources: map[string]Source{}}
 	obs, _ := b["observations"].([]any)
 	for _, v := range obs {
@@ -82,6 +82,9 @@ func (ObservationsOnly) Convert(_ context.Context, b Batch, _ Snapshot) (Result,
 		}
 		tid := "observation:" + id
 		at, _ := o["observedAt"].(float64)
+		if old, ok := previous.Sources[id]; ok && sourceVersion(old) == sourceVersion(o) {
+			at = previous.Tasks[tid].UpdatedAt
+		}
 		r.Sources[id] = o
 		r.Tasks[tid] = Task{ID: tid, Purpose: str(name), State: "unknown", Attention: "unknown", Stale: !connected(b), UpdatedAt: at, Tree: []Node{{ID: "observation", State: "unknown", Attention: "unknown", Current: boolean(false), SourceRefs: []string{id}, Content: Content{Kind: "text", Text: str("作業の解釈は未設定です。根拠に取得内容を表示します。")}}}}
 		r.Roots = append(r.Roots, tid)

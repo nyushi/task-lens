@@ -49,13 +49,16 @@ func Tick(ctx context.Context, in Input, tr Transform, s *Store) (bool, error) {
 	}
 	b, err := in.Read(ctx)
 	if err != nil {
+		s.PauseCleanup()
 		s.Observe("disconnected", false)
 		s.Fail(err)
 		return false, err
 	}
+	s.UpdatePresence(b)
 	v := versionOf(b)
 	previous := s.Snapshot()
 	if s.Observe(v, connected(b)) {
+		s.Reconcile(b, time.Now())
 		return false, nil
 	}
 	r, err := tr.Convert(ctx, b, previous)
@@ -65,10 +68,12 @@ func Tick(ctx context.Context, in Input, tr Transform, s *Store) (bool, error) {
 	}
 	latest, err := in.Read(ctx)
 	if err != nil {
+		s.PauseCleanup()
 		s.Observe("disconnected", false)
 		s.Fail(err)
 		return false, err
 	}
+	s.UpdatePresence(latest)
 	lv := versionOf(latest)
 	s.Observe(lv, connected(latest))
 	if lv != v {
@@ -77,6 +82,19 @@ func Tick(ctx context.Context, in Input, tr Transform, s *Store) (bool, error) {
 		return false, err
 	}
 	ok, err := s.Commit(previous.Revision, v, r)
+	if ok {
+		if _, yes := tr.(ObservationsOnly); yes {
+			owners := map[string]Ownership{}
+			all, _ := observations(b)
+			for id, o := range all {
+				owners["observation:"+id] = Ownership{id, scopeOf(o)}
+			}
+			s.TrackOwners(owners)
+		}
+	}
+	if ok {
+		s.Reconcile(latest, time.Now())
+	}
 	if err != nil {
 		s.Fail(err)
 	}

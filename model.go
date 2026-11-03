@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -38,7 +39,8 @@ type Result struct {
 	Sources map[string]Source `json:"sources"`
 }
 type Snapshot struct {
-	Usage *Usage `json:"usage,omitempty"`
+	OldAfterSeconds int    `json:"oldAfterSeconds,omitempty"`
+	Usage           *Usage `json:"usage,omitempty"`
 	Result
 	Revision  uint64  `json:"revision"`
 	Connected bool    `json:"connected"`
@@ -150,10 +152,13 @@ type Store struct {
 	mu       sync.Mutex
 	snapshot Snapshot
 	version  string
+	cleanup  CleanupOptions
+	owners   map[string]Ownership
+	missing  map[string]time.Time
 }
 
 func NewStore() *Store {
-	return &Store{snapshot: Snapshot{Result: Result{Tasks: map[string]Task{}, Roots: []string{}, Sources: map[string]Source{}}}}
+	return &Store{owners: map[string]Ownership{}, missing: map[string]time.Time{}, snapshot: Snapshot{Result: Result{Tasks: map[string]Task{}, Roots: []string{}, Sources: map[string]Source{}}}}
 }
 func (s *Store) Snapshot() Snapshot { s.mu.Lock(); defer s.mu.Unlock(); return clone(s.snapshot) }
 func (s *Store) Observe(version string, connected bool) bool {

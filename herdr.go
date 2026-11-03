@@ -177,12 +177,17 @@ func (h *HerdrInput) Read(ctx context.Context) (Batch, error) {
 		return nil, fmt.Errorf("invalid terminal list")
 	}
 	obs := []any{}
+	listed := map[string]bool{}
 	for _, v := range terms {
 		t, ok := v.(map[string]any)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("invalid terminal list entry")
 		}
 		id, _ := t["address"].(string)
+		if id == "" || listed[id] {
+			return nil, fmt.Errorf("invalid terminal identity")
+		}
+		listed[id] = true
 		if !h.allowed[id] {
 			continue
 		}
@@ -224,6 +229,6 @@ func (h *HerdrInput) Read(ctx context.Context) (Batch, error) {
 	h.mu.Lock()
 	epoch, subscribed := h.epoch, h.subscribed
 	h.mu.Unlock()
-	return Batch{"connected": subscribed, "epoch": epoch, "observations": obs}, nil
+	return Batch{"source_snapshots": sourceSnapshot("default", obs), "connected": subscribed, "epoch": epoch, "observations": obs}, nil
 }
 func (h *HerdrInput) Close() error { h.cancel(); <-h.done; return nil }

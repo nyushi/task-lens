@@ -188,16 +188,21 @@ func (i *Incremental) Tick(ctx context.Context, in Input, s *Store) (bool, error
 	}()
 	b, e := in.Read(ctx)
 	if e != nil {
+		s.PauseCleanup()
 		s.Observe("disconnected", false)
 		s.Fail(e)
 		return false, e
 	}
+	s.UpdatePresence(b)
 	all, e := observations(b)
 	if e != nil {
+		s.PauseCleanup()
 		s.Fail(e)
 		return false, e
 	}
 	now := i.now()
+	cleanupBatch := b
+	readFailed := false
 	ids := []string{}
 	for id, o := range all {
 		ids = append(ids, id)
@@ -292,10 +297,14 @@ func (i *Incremental) Tick(ctx context.Context, in Input, s *Store) (bool, error
 		}
 		latest, e := in.Read(ctx)
 		if e != nil {
+			readFailed = true
+			s.PauseCleanup()
 			hold("verification read failed")
 			i.usage.Discarded++
 			continue
 		}
+		s.UpdatePresence(latest)
+		cleanupBatch = latest
 		current, e := observations(latest)
 		if e != nil || current[id] == nil || sourceVersion(current[id]) != sourceVersion(o) {
 			hold("source changed during conversion")
@@ -329,6 +338,10 @@ func (i *Incremental) Tick(ctx context.Context, in Input, s *Store) (bool, error
 			hold("invalid merged history")
 			continue
 		}
+		for tid, task := range r.Tasks {
+			task.UpdatedAt = nowUnix(o, now)
+			r.Tasks[tid] = task
+		}
 		p.result = r
 		p.acknowledged = clone(o)
 		p.pending = time.Time{}
@@ -353,7 +366,40 @@ func (i *Incremental) Tick(ctx context.Context, in Input, s *Store) (bool, error
 	base := s.Snapshot()
 	v := versionOf(b)
 	s.Observe(v, connected(b))
-	_, e = s.Commit(base.Revision, v, merged)
+	ok, e := s.Commit(base.Revision, v, merged)
+	if ok {
+		owners := map[string]Ownership{}
+		for id, p := range i.sources {
+			if p.acknowledged != nil {
+				for tid := range p.result.Tasks {
+					owners[tid] = Ownership{id, scopeOf(p.acknowledged)}
+				}
+			}
+		}
+		s.TrackOwners(owners)
+	}
+	if ok && !readFailed {
+		removed := s.Reconcile(cleanupBatch, now)
+		for id, p := range i.sources {
+			hadRemoval := false
+			for tid := range removed {
+				if _, yes := p.result.Tasks[tid]; yes {
+					hadRemoval = true
+				}
+				delete(p.result.Tasks, tid)
+			}
+			roots := []string{}
+			for _, root := range p.result.Roots {
+				if !removed[root] {
+					roots = append(roots, root)
+				}
+			}
+			p.result.Roots = roots
+			if hadRemoval && len(p.result.Tasks) == 0 {
+				delete(i.sources, id)
+			}
+		}
+	}
 	if e != nil {
 		s.Fail(e)
 	}
@@ -398,3 +444,10 @@ func (s *Store) SetUsage(u Usage) {
 
 // Used in synthetic volume reports, not for tokenizer claims.
 func inputChars(o map[string]any) int { return utf8.RuneCountInString(o["content"].(string)) }
+
+func nowUnix(o map[string]any, now time.Time) float64 {
+	if at, ok := o["observedAt"].(float64); ok && at > 0 {
+		return at
+	}
+	return float64(now.Unix())
+}

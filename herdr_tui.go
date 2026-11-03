@@ -97,12 +97,17 @@ func (h *HerdrTUIInput) Read(ctx context.Context) (batch Batch, err error) {
 	}
 	obs := []any{}
 	seen := map[string]bool{}
+	listed := map[string]bool{}
 	for _, p := range panes {
 		pane, ok := p.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("invalid TUI pane")
 		}
 		id, _ := pane["pane_id"].(string)
+		if id == "" || listed[id] {
+			return nil, fmt.Errorf("invalid pane identity")
+		}
+		listed[id] = true
 		if !h.panes[id] {
 			continue
 		}
@@ -158,5 +163,5 @@ func (h *HerdrTUIInput) Read(ctx context.Context) (batch Batch, err error) {
 	sort.Slice(obs, func(i, j int) bool {
 		return obs[i].(map[string]any)["id"].(string) < obs[j].(map[string]any)["id"].(string)
 	})
-	return Batch{"connected": true, "observations": obs}, nil
+	return Batch{"source_snapshots": sourceSnapshot("default", obs), "connected": true, "observations": obs}, nil
 }

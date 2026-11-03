@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-//go:embed index.html fixtures/demo-tasks.json
+//go:embed index.html ui.js fixtures/demo-tasks.json
 var assets embed.FS
 
 type PluginConfig struct {
@@ -25,10 +25,13 @@ type PluginConfig struct {
 	Options json.RawMessage `json:"options"`
 }
 type Config struct {
-	Input     PluginConfig `json:"input"`
-	Transform PluginConfig `json:"transform"`
-	Interval  float64      `json:"interval"`
-	Mode      string       `json:"mode"`
+	Input           PluginConfig   `json:"input"`
+	Transform       PluginConfig   `json:"transform"`
+	Interval        float64        `json:"interval"`
+	Mode            string         `json:"mode"`
+	HTTP            HTTPOptions    `json:"http"`
+	Cleanup         CleanupOptions `json:"cleanup"`
+	OldAfterSeconds int            `json:"old_after_seconds"`
 }
 
 func options(raw json.RawMessage, v any) error {
@@ -110,9 +113,12 @@ func makeTransform(c PluginConfig) (Transform, error) {
 	}
 }
 func webHandler(s *Store, port int, mode string) http.Handler {
+	return webHandlerHosts(s, HTTPOptions{}.hosts(port), mode)
+}
+func webHandlerHosts(s *Store, hosts map[string]bool, mode string) http.Handler {
 	page, _ := assets.ReadFile("index.html")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != "127.0.0.1:"+strconv.Itoa(port) && r.Host != "localhost:"+strconv.Itoa(port) {
+		if !hosts[strings.ToLower(r.Host)] {
 			http.Error(w, "forbidden", 403)
 			return
 		}
@@ -143,11 +149,15 @@ func webHandler(s *Store, port int, mode string) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
 		switch r.URL.Path {
 		case "/":
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_, _ = w.Write(page)
+		case "/ui.js":
+			raw, _ := assets.ReadFile("ui.js")
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+			_, _ = w.Write(raw)
 		case "/state":
 			// Non-secret header: cross-origin scripts need a preflight, which
 			// this GET-only server rejects. Also blocks navigations/form loads.
@@ -195,7 +205,10 @@ func execute(ctx context.Context, args []string) error {
 	}
 	f := flag.NewFlagSet("task-lens", flag.ContinueOnError)
 	path := f.String("config", "", "JSON config (default: embedded demo)")
-	port := f.Int("port", 8765, "localhost port")
+	port := f.Int("port", 8765, "port (legacy override)")
+	listen := f.String("listen", "", "listen IP:port (overrides config)")
+	allowed := f.String("allowed-hosts", "", "comma-separated exact host:port entries")
+	remote := f.Bool("allow-remote", false, "allow non-loopback access without authentication")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
@@ -219,6 +232,38 @@ func execute(ctx context.Context, args []string) error {
 	if c.Mode == "" {
 		c.Mode = "読み取り専用"
 	}
+	if c.HTTP.Listen == "" {
+		c.HTTP.Listen = "127.0.0.1:8765"
+	}
+	if *listen != "" {
+		c.HTTP.Listen = *listen
+	}
+	f.Visit(func(flag *flag.Flag) {
+		switch flag.Name {
+		case "port":
+			host, _, err := net.SplitHostPort(c.HTTP.Listen)
+			if err == nil {
+				c.HTTP.Listen = net.JoinHostPort(host, strconv.Itoa(*port))
+			}
+		case "allow-remote":
+			c.HTTP.AllowRemote = *remote
+		case "allowed-hosts":
+			c.HTTP.AllowedHosts = strings.Split(*allowed, ",")
+		}
+	})
+	address, e := c.HTTP.validate()
+	if e != nil {
+		return e
+	}
+	if e = c.Cleanup.validate(); e != nil {
+		return e
+	}
+	if c.OldAfterSeconds < 0 {
+		return fmt.Errorf("old_after_seconds must be non-negative")
+	}
+	if c.OldAfterSeconds == 0 {
+		c.OldAfterSeconds = 3600
+	}
 	in, e := makeInput(ctx, c.Input)
 	if e != nil {
 		return e
@@ -229,25 +274,34 @@ func execute(ctx context.Context, args []string) error {
 		return e
 	}
 	s := NewStore()
+	s.cleanup = c.Cleanup
+	s.snapshot.OldAfterSeconds = c.OldAfterSeconds
 	if _, e = Tick(ctx, in, tr, s); e != nil {
 		return fmt.Errorf("initial conversion failed: %w", e)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go Run(ctx, in, tr, s, time.Duration(c.Interval*float64(time.Second)))
-	listener, e := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(*port)))
+	listener, e := net.Listen("tcp", address)
 	if e != nil {
 		return e
 	}
 	actual := listener.Addr().(*net.TCPAddr).Port
-	server := &http.Server{Handler: webHandler(s, actual, c.Mode), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Handler: webHandlerHosts(s, c.HTTP.hosts(actual), c.Mode), ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdown)
 	}()
-	fmt.Printf("http://127.0.0.1:%d/\n", actual)
+	host, _, _ := net.SplitHostPort(address)
+	if !net.ParseIP(host).IsLoopback() {
+		fmt.Fprintln(os.Stderr, "Remote access enabled without authentication: network clients can read task details. Use a trusted network; HTTP is unencrypted.")
+	}
+	if net.ParseIP(host).IsUnspecified() {
+		host, _, _ = net.SplitHostPort(c.HTTP.AllowedHosts[0])
+	}
+	fmt.Printf("http://%s/\n", net.JoinHostPort(host, strconv.Itoa(actual)))
 	e = server.Serve(listener)
 	if e == http.ErrServerClosed {
 		return nil

@@ -18,6 +18,7 @@ jobs:
           cache: false
       - run: go test -race ./...
       - run: go vet ./...
+      - run: node --test ui_test.mjs
       - run: go build -trimpath -o task-lens .
   build:
     runs-on: ubuntu-latest
