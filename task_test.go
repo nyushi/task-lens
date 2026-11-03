@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -234,22 +237,103 @@ func TestCommandTransform(t *testing.T) {
 	}
 }
 func TestWeb(t *testing.T) {
-	h := webHandler(NewStore(), 8765, "token", "demo")
 	for _, tc := range []struct {
-		method, path, host string
-		code               int
-	}{{"GET", "/token/", "127.0.0.1:8765", 200}, {"GET", "/token/state", "localhost:8765", 200}, {"POST", "/token/state", "localhost:8765", 405}, {"GET", "/token/", "evil.example", 403}, {"GET", "/wrong/", "localhost:8765", 404}} {
-		r := httptest.NewRequest(tc.method, "http://"+tc.host+tc.path, nil)
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, r)
-		if w.Code != tc.code {
-			t.Fatalf("%s: %d", tc.path, w.Code)
+		name, method, path, host string
+		headers                  map[string]string
+		code                     int
+	}{
+		{"page", "GET", "/", "127.0.0.1:8765", nil, 200},
+		{"state", "GET", "/state", "localhost:8765", map[string]string{"X-TaskLens-Request": "1", "Origin": "http://localhost:8765", "Sec-Fetch-Site": "same-origin"}, 200},
+		{"local client", "GET", "/state", "127.0.0.1:8765", map[string]string{"X-TaskLens-Request": "1"}, 200},
+		{"no header", "GET", "/state", "localhost:8765", nil, 403},
+		{"POST", "POST", "/state", "localhost:8765", nil, 405},
+		{"preflight", "OPTIONS", "/state", "localhost:8765", nil, 405},
+		{"rebinding", "GET", "/", "evil.example", nil, 403},
+		{"wrong port", "GET", "/", "localhost:9000", nil, 403},
+		{"old URL", "GET", "/token/", "localhost:8765", nil, 404},
+		{"foreign origin", "GET", "/state", "localhost:8765", map[string]string{"X-TaskLens-Request": "1", "Origin": "https://evil.example"}, 403},
+		{"null origin", "GET", "/state", "localhost:8765", map[string]string{"X-TaskLens-Request": "1", "Origin": "null"}, 403},
+		{"different port", "GET", "/state", "localhost:8765", map[string]string{"X-TaskLens-Request": "1", "Origin": "http://localhost:9000"}, 403},
+		{"foreign referrer", "GET", "/state", "localhost:8765", map[string]string{"X-TaskLens-Request": "1", "Referer": "https://evil.example/"}, 403},
+		{"same referrer", "GET", "/state", "localhost:8765", map[string]string{"X-TaskLens-Request": "1", "Referer": "http://localhost:8765/"}, 200},
+		{"cross site", "GET", "/state", "localhost:8765", map[string]string{"X-TaskLens-Request": "1", "Sec-Fetch-Site": "cross-site"}, 403},
+		{"same site other origin", "GET", "/state", "localhost:8765", map[string]string{"X-TaskLens-Request": "1", "Sec-Fetch-Site": "same-site"}, 403},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Fresh handlers simulate launches: routes need no per-launch credentials.
+			for attempt := 0; attempt < 2; attempt++ {
+				h := webHandler(NewStore(), 8765, "demo")
+				r := httptest.NewRequest(tc.method, "http://"+tc.host+tc.path, nil)
+				for k, v := range tc.headers {
+					r.Header.Set(k, v)
+				}
+				w := httptest.NewRecorder()
+				h.ServeHTTP(w, r)
+				if w.Code != tc.code {
+					t.Fatalf("status %d, want %d", w.Code, tc.code)
+				}
+				if w.Header().Get("Access-Control-Allow-Origin") != "" || w.Header().Get("Set-Cookie") != "" {
+					t.Fatal("unexpected CORS or cookie")
+				}
+				if tc.code == 200 {
+					if w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("Cross-Origin-Resource-Policy") != "same-origin" || !strings.Contains(w.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") {
+						t.Fatal("missing protection")
+					}
+					if tc.path == "/" && !strings.Contains(w.Body.String(), "treeView") {
+						t.Fatal("missing UI")
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestStableURLRestart(t *testing.T) {
+	probe, e := net.Listen("tcp", "127.0.0.1:0")
+	if e != nil {
+		t.Fatal(e)
+	}
+	port := probe.Addr().(*net.TCPAddr).Port
+	probe.Close()
+	address := "http://127.0.0.1:" + strconv.Itoa(port) + "/"
+	client := &http.Client{Timeout: time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
+	for launch := 0; launch < 2; launch++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { done <- execute(ctx, []string{"--port", strconv.Itoa(port)}) }()
+		reached := false
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			r, e := client.Get(address)
+			if e == nil {
+				reached = r.StatusCode == 200
+				r.Body.Close()
+				if reached {
+					break
+				}
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
-		if tc.code == 200 && w.Header().Get("Cache-Control") != "no-store" {
-			t.Fatal("cache header missing")
+		if !reached {
+			cancel()
+			t.Fatal("stable root unavailable")
 		}
-		if tc.path == "/token/" && tc.code == 200 && !strings.Contains(w.Body.String(), "treeView") {
-			t.Fatal("embedded UI missing")
+		req, _ := http.NewRequest("GET", address+"state", nil)
+		req.Header.Set("X-TaskLens-Request", "1")
+		response, e := client.Do(req)
+		if e != nil {
+			cancel()
+			t.Fatal(e)
+		}
+		var snapshot Snapshot
+		e = json.NewDecoder(response.Body).Decode(&snapshot)
+		response.Body.Close()
+		cancel()
+		if runError := <-done; runError != nil {
+			t.Fatal(runError)
+		}
+		if e != nil || response.StatusCode != 200 || len(snapshot.Tasks) == 0 {
+			t.Fatal("stable state unavailable", e)
 		}
 	}
 }

@@ -2,15 +2,14 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"embed"
-	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -110,11 +109,28 @@ func makeTransform(c PluginConfig) (Transform, error) {
 		return nil, fmt.Errorf("unknown transform plugin %q", c.Plugin)
 	}
 }
-func webHandler(s *Store, port int, token, mode string) http.Handler {
+func webHandler(s *Store, port int, mode string) http.Handler {
 	page, _ := assets.ReadFile("index.html")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Host != "127.0.0.1:"+strconv.Itoa(port) && r.Host != "localhost:"+strconv.Itoa(port) {
 			http.Error(w, "forbidden", 403)
+			return
+		}
+		// Host blocks DNS rebinding. Browser origins must match the exact host/port.
+		origin := "http://" + r.Host
+		if value := r.Header.Get("Origin"); value != "" && value != origin {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		if value := r.Header.Get("Referer"); value != "" {
+			ref, err := url.Parse(value)
+			if err != nil || ref.Scheme != "http" || ref.Host != r.Host {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+		}
+		if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
 		if r.Method != "GET" {
@@ -122,15 +138,23 @@ func webHandler(s *Store, port int, token, mode string) http.Handler {
 			http.Error(w, "read only", 405)
 			return
 		}
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
+		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")
 		switch r.URL.Path {
-		case "/" + token + "/":
+		case "/":
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_, _ = w.Write(page)
-		case "/" + token + "/state":
+		case "/state":
+			// Non-secret header: cross-origin scripts need a preflight, which
+			// this GET-only server rejects. Also blocks navigations/form loads.
+			if r.Header.Get("X-TaskLens-Request") != "1" {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			v := s.Snapshot()
 			v.Mode = mode
@@ -216,20 +240,14 @@ func execute(ctx context.Context, args []string) error {
 		return e
 	}
 	actual := listener.Addr().(*net.TCPAddr).Port
-	random := make([]byte, 24)
-	if _, e = rand.Read(random); e != nil {
-		listener.Close()
-		return e
-	}
-	token := base64.RawURLEncoding.EncodeToString(random)
-	server := &http.Server{Handler: webHandler(s, actual, token, c.Mode), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Handler: webHandler(s, actual, c.Mode), ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdown)
 	}()
-	fmt.Printf("http://127.0.0.1:%d/%s/\n", actual, token)
+	fmt.Printf("http://127.0.0.1:%d/\n", actual)
 	e = server.Serve(listener)
 	if e == http.ErrServerClosed {
 		return nil
