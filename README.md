@@ -37,6 +37,44 @@ Herdr TUI設定のソケットとpane一覧を変更して使います。例の�
 - [Herdr用プロンプト例](examples/herdr-prompt.txt)
 - [入力例](examples/input.json) / [出力例](examples/output.json)
 
+## Claude Codeフック連携（設計案・未実装）
+
+画面の巡回に代えて、Claude Codeのフックからローカル受信器へ状態を通知する案です。
+受信器・hook入力アダプター・以下のコマンドは未実装です。
+
+| フック | 取得する情報・用途 | 制約 |
+|---|---|---|
+| `PermissionRequest` | `tool_name`, `tool_input`から権限確認待ちを記録 | 許可結果ではない。非対話時の自動拒否直前にも発生し、sandboxのネットワーク確認は対象外 |
+| `PreToolUse`（`AskUserQuestion`のみ） | `tool_use_id`, `tool_input.questions`から質問を記録 | 実行前の通知。通常の文章による質問は捕捉せず、回答・表示完了も保証しない |
+| `Stop` | `last_assistant_message`, `stop_hook_active`から応答終了を記録 | タスク完了とは限らない。ユーザー中断では発火せず、APIエラーは別イベント |
+| `UserPromptSubmit` | `prompt`から入力再開の候補を記録 | 権限ダイアログやツール内の回答をすべて捕捉するものではない |
+
+commandフックはstdinでJSONを受け取ります。共通の`session_id`・`hook_event_name`で関連付け、受信時刻を付ける想定です。
+`cwd`・`transcript_path`等も届きますが、全文ログを読む必要はありません。必要なフィールドだけを長さ制限付きで記録し、重複・欠落・待ち状態の解除を扱う設計が必要です。
+回答済みの確定には、対応する`PostToolUse`等との照合を別途検討します。
+
+設定の形だけを示します。**`/UNIMPLEMENTED/tasklens-hook`は存在しないプレースホルダーです。そのまま設定に入れないでください。**
+実装後に既存のClaude Code設定へマージする想定で、既存hooksは上書きしません。
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [{"hooks": [{"type": "command", "command": "/UNIMPLEMENTED/tasklens-hook"}]}],
+    "PreToolUse": [{"matcher": "AskUserQuestion", "hooks": [{"type": "command", "command": "/UNIMPLEMENTED/tasklens-hook"}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "/UNIMPLEMENTED/tasklens-hook"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/UNIMPLEMENTED/tasklens-hook"}]}]
+  }
+}
+```
+
+受信コマンドは短時間のローカル記録だけを行い、stdoutを空にして終了コード0を返す想定です。
+許可・拒否・入力変更・Stopの継続指示は返さず、追加モデルも呼びません。
+フック仕様は利用中のバージョンの[公式リファレンス](https://code.claude.com/docs/en/hooks)で確認してください。
+
+**フックだけでは作業ツリーは作れません。** 目的・実績・現在位置・予定を安定したTask/Node ID付きで報告する仕組みが別途必要です。
+その構造化進捗とフック情報だけで必要な表示を作れれば、Herdr入力を使わない構成も可能です。
+既存のHerdr TUI/coreアダプターは維持し、Claude以外の担当や補助的な画面情報が必要な場合に選択できます。
+
 ## 開発
 
 ```sh
