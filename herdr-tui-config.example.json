@@ -1,0 +1,1 @@
+{"input":{"plugin":"herdr-tui","options":{"socket":"/absolute/path/to/herdr.sock","panes":["pane-id-from-selected-session"]}},"transform":{"plugin":"observations"},"mode":"Herdr TUI · 読み取り専用","interval":120}

@@ -26,7 +26,8 @@ JSONファイルを指定した場合、相対パスは起動ディレクトリ�
 | `recorded` | `path` | 保存済みTask JSONをfixtureとして読む |
 | `file` | `path` | 任意の入力JSONオブジェクトを読む |
 | `command` | `command`, `argv`, `timeout`, `max_output_bytes` | 外部プログラムへ`{}`をstdinで渡し、入力JSONをstdoutから読む |
-| `herdr` | `socket`, `terminals` | 選択した端末の画面とメタデータ |
+| `herdr-tui` | `socket`, `panes` | Herdr TUIの指定pane。詳細は[専用文書](herdr-tui.md) |
+| `herdr-core` / `herdr` | `socket`, `terminals` | 選択した端末の画面とメタデータ |
 
 入力の共通部分は`connected`です。それ以外は変換器との契約で決めます。
 新しい入力元は外部コマンドとして追加でき、バイナリの再ビルドは不要です。
@@ -56,3 +57,5 @@ Python版の既存組み込みplugin名は互換エイリアスとして受け�
 127.0.0.1限定、ランダムURL、GETのみです。Hostを検証し、キャッシュを無効にします。
 入力データやプロンプトから設定を書き換えません。外部コマンドは信頼するものだけを設定してください。
 `*.local.json`はGit管理対象外です。ローカルのソケットや設定は公開しないでください。
+
+従来の`herdr`はcore入力の互換名です。TUIには`herdr-tui`を選択してください。

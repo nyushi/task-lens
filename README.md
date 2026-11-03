@@ -1,7 +1,7 @@
 # TaskLens
 
 入力データをTaskとツリーに変換し、ローカルWebで表示するツールです。
-Herdr、JSONファイル、外部コマンドを入力にできます。入力・変換・表示は一方向で、返信や操作は行いません。
+Herdr TUI、herdr-core、JSONファイル、外部コマンドを入力にできます。入力・変換・表示は一方向で、返信や操作は行いません。
 
 ## 起動
 
@@ -17,10 +17,10 @@ Webもバイナリに含まれるため、実行時にGoやPythonは不要です
 外部CLIを選ぶ場合は、そのCLIを別途用意してください。
 
 ```sh
-./task-lens --config herdr-config.example.json --port 8765
+./task-lens --config herdr-tui-config.example.json --port 8765
 ```
 
-Herdr設定のソケットと端末一覧を変更して使います。例の変換器は取得内容の表示のみで、外部送信しません。
+Herdr TUI設定のソケットとpane一覧を変更して使います。例の変換器は取得内容の表示のみで、外部送信しません。
 
 ## 変換器
 
@@ -28,6 +28,7 @@ Herdr設定のソケットと端末一覧を変更して使います。例の変
 stdinに入力JSONと前回状態を渡し、stdoutからTask JSONを受け取ります。
 
 - [設定](docs/configuration.md)
+- [Herdr TUI入力](docs/herdr-tui.md)
 - [入出力契約](docs/contract.md)
 - [プロンプトとCLIラッパー](docs/transforms.md)
 - [Herdr用プロンプト例](examples/herdr-prompt.txt)

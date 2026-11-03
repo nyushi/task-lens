@@ -64,7 +64,16 @@ func makeInput(ctx context.Context, c PluginConfig) (Input, error) {
 			return nil, e
 		}
 		return &CommandInput{o}, nil
-	case "herdr", "adapters:HerdrInput":
+	case "herdr-tui":
+		var o struct {
+			Socket string   `json:"socket"`
+			Panes  []string `json:"panes"`
+		}
+		if e := options(c.Options, &o); e != nil {
+			return nil, e
+		}
+		return NewHerdrTUI(o.Socket, o.Panes)
+	case "herdr", "herdr-core", "adapters:HerdrInput":
 		var o struct {
 			Socket    string   `json:"socket"`
 			Terminals []string `json:"terminals"`

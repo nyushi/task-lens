@@ -17,7 +17,7 @@
 [完全な入力例](../examples/input.json)は架空のHerdrデータです。
 変換器には現在の入力全体と前回のTaskストアを渡します。ログ差分だけを渡す方式ではありません。
 
-Herdr observationの項目：
+herdr-core observationの項目（TUIは[別仕様](herdr-tui.md)）：
 
 | 項目 | 意味 |
 |---|---|
