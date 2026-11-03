@@ -38,6 +38,7 @@ type Result struct {
 	Sources map[string]Source `json:"sources"`
 }
 type Snapshot struct {
+	Usage *Usage `json:"usage,omitempty"`
 	Result
 	Revision  uint64  `json:"revision"`
 	Connected bool    `json:"connected"`

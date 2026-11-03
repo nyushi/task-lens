@@ -175,6 +175,11 @@ func TestHelperProcess(t *testing.T) {
 		return
 	}
 	switch mode {
+	case "incremental":
+		if e := fixtureCommand(); e != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
 	case "valid":
 		var e struct {
 			Input struct {

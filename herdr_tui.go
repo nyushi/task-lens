@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -57,15 +58,18 @@ func (r TUIRPC) Call(ctx context.Context, method string, params map[string]any) 
 }
 
 type HerdrTUIInput struct {
-	rpc   TUIRPC
-	panes map[string]bool
+	rpc        TUIRPC
+	panes      map[string]bool
+	mu         sync.Mutex
+	continuity uint64
+	last       map[string]map[string]any
 }
 
 func NewHerdrTUI(socket string, panes []string) (*HerdrTUIInput, error) {
 	if socket == "" || len(panes) == 0 {
 		return nil, fmt.Errorf("TUI socket and explicit panes required")
 	}
-	h := &HerdrTUIInput{TUIRPC{socket}, map[string]bool{}}
+	h := &HerdrTUIInput{rpc: TUIRPC{socket}, panes: map[string]bool{}, last: map[string]map[string]any{}}
 	for _, id := range panes {
 		if id == "" {
 			return nil, fmt.Errorf("empty pane ID")
@@ -75,7 +79,14 @@ func NewHerdrTUI(socket string, panes []string) (*HerdrTUIInput, error) {
 	return h, nil
 }
 func (h *HerdrTUIInput) Close() error { return nil }
-func (h *HerdrTUIInput) Read(ctx context.Context) (Batch, error) {
+func (h *HerdrTUIInput) Read(ctx context.Context) (batch Batch, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	defer func() {
+		if err != nil {
+			h.continuity++
+		}
+	}()
 	list, e := h.rpc.Call(ctx, "pane.list", map[string]any{})
 	if e != nil {
 		return nil, e
@@ -85,6 +96,7 @@ func (h *HerdrTUIInput) Read(ctx context.Context) (Batch, error) {
 		return nil, fmt.Errorf("invalid TUI panes")
 	}
 	obs := []any{}
+	seen := map[string]bool{}
 	for _, p := range panes {
 		pane, ok := p.(map[string]any)
 		if !ok {
@@ -94,6 +106,7 @@ func (h *HerdrTUIInput) Read(ctx context.Context) (Batch, error) {
 		if !h.panes[id] {
 			continue
 		}
+		seen[id] = true
 		result, e := h.rpc.Call(ctx, "pane.read", map[string]any{"pane_id": id, "source": "visible", "strip_ansi": true})
 		if e != nil {
 			return nil, e
@@ -116,14 +129,31 @@ func (h *HerdrTUIInput) Read(ctx context.Context) (Batch, error) {
 			truncated = true
 		}
 		metadata := map[string]any{}
-		for _, k := range []string{"pane_id", "terminal_id", "workspace_id", "tab_id", "label", "title", "agent", "agent_status", "revision"} {
+		for _, k := range []string{"pane_id", "terminal_id", "workspace_id", "tab_id", "label", "title", "agent", "agent_status", "revision", "scroll"} {
 			metadata[k] = pane[k]
 		}
+		scroll, _ := pane["scroll"].(map[string]any)
+		identity := map[string]any{"terminal": pane["terminal_id"], "offset": scroll["offset_from_bottom"], "rows": scroll["viewport_rows"]}
+		generation := uint64(0)
+		if previous := h.last[id]; previous != nil {
+			generation, _ = previous["generation"].(uint64)
+			before, _ := previous["revision"].(float64)
+			after, _ := read["revision"].(float64)
+			if previous["missing"] == true || versionOf(previous["identity"].(map[string]any)) != versionOf(identity) || after < before {
+				generation++
+			}
+		}
+		h.last[id] = map[string]any{"identity": identity, "revision": read["revision"], "generation": generation}
 		label, _ := pane["label"].(string)
 		if label == "" {
 			label = id
 		}
-		obs = append(obs, map[string]any{"id": "herdr-tui:" + id, "label": label, "revision": read["revision"], "observedAt": float64(time.Now().Unix()), "content": text, "coverage": map[string]any{"complete": !truncated, "how": "visible", "why": "current viewport only; not conversation history"}, "metadata": metadata})
+		obs = append(obs, map[string]any{"id": "herdr-tui:" + id, "continuity": fmt.Sprintf("%d:%d", h.continuity, generation), "label": label, "revision": read["revision"], "observedAt": float64(time.Now().Unix()), "content": text, "coverage": map[string]any{"complete": !truncated, "how": "visible", "why": "current viewport only; not conversation history"}, "metadata": metadata})
+	}
+	for id, previous := range h.last {
+		if !seen[id] {
+			previous["missing"] = true
+		}
 	}
 	sort.Slice(obs, func(i, j int) bool {
 		return obs[i].(map[string]any)["id"].(string) < obs[j].(map[string]any)["id"].(string)

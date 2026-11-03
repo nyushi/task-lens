@@ -11,7 +11,7 @@ JSONファイルを指定した場合、相対パスは起動ディレクトリ�
   "transform": {"plugin": "command", "options": {
     "command": "/path/to/wrapper", "argv": [],
     "prompt_file": "examples/herdr-prompt.txt", "timeout": 120,
-    "max_output_bytes": 2000000
+    "max_input_bytes": 16000, "max_output_bytes": 8000
   }},
   "interval": 120,
   "mode": "読み取り専用"
@@ -59,3 +59,5 @@ Python版の既存組み込みplugin名は互換エイリアスとして受け�
 `*.local.json`はGit管理対象外です。ローカルのソケットや設定は公開しないでください。
 
 従来の`herdr`はcore入力の互換名です。TUIには`herdr-tui`を選択してください。
+
+外部commandは[担当別増分契約v2・予算](incremental.md)を使います。observationsのない全量入力は拒否します。

@@ -18,7 +18,7 @@ shell展開やevalは行いません。stdinにJSONを1件渡し、stdoutからJ
 進捗や診断はstderrへ出してください。stdoutにMarkdownやログを混ぜないでください。
 
 timeoutは既定30秒・最大300秒です。超過時は起動プロセス群を停止します。
-stdout上限は既定2MB・最大8MBで、超過中に実行を停止します。
+モデル変換のstdout上限は既定8,000bytesです。入力・累計上限は[増分処理](incremental.md)を参照してください。
 stderrは先頭8KBだけをメモリに保持し、Webへ自動公開しません。
 終了コード、JSON、Task契約を検証します。失敗時に以前の有効Taskを上書きしません。
 
@@ -34,12 +34,12 @@ go build -o task-lens .
 ./task-lens --config command-demo-config.json
 ```
 
-この設定は`./task-lens fixture-transform`を呼び、渡されたfixtureをそのまま返します。
+この設定は静止待ち後に`./task-lens fixture-transform`を呼び、namespace付きの架空Taskを返します。最初の表示まで約15秒です。
 
 Codexの疎通用アダプターは`./task-lens codex-transform`です。
 `codex exec --ignore-user-config --ephemeral --sandbox read-only --output-schema ...`を使用します。
 commandをTaskLensバイナリ、argvを`["codex-transform"]`にすると選択できます。
-これは単一Task・平坦ノード用で、previousをモデルに渡さない疎通用実装です。
+これは単一Task・平坦ノード用です。担当別previousとnamespaceに対応していますが、実モデルでの再検証は行っていません。
 再帰Task生成や継続更新用の本番変換器ではありません。
 
 Python版で架空記録のCodex実行→JSON検証→表示を確認済みです。
@@ -57,9 +57,9 @@ Claudeは利用者が別途選択する候補です。このプロジェクト�
 4. Herdrを`observations`変換器につなぎ、ローカルで取得範囲を確認します。
 5. 外部送信の許可・送信先・対象データを確認してから変換器を切り替えます。
 
-変換コマンドには取得画面、metadata、前回Taskと根拠が渡ります。
+変換コマンドには対象担当の画面変化、metadata、対象担当の前回Taskと本文を除いた根拠参照が渡ります。
 実際の外部送信範囲はラッパーに依存します。プロンプトだけでは送信制御を保証できません。
 実データを公開fixtureへ追加しないでください。
 
 Go版は模擬UnixソケットとダミーCLIで検証しています。実Herdrへの接続は未検証です。
-現在は入力全体を変換するため、担当別の増分変換・トークン予算管理はありません。
+担当別の変更とバイト予算を適用します。実token数の計測・請求上限はありません。

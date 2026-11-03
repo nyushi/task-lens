@@ -1,1 +1,1 @@
-{"input":{"plugin":"demo"},"transform":{"plugin":"command","options":{"command":"./task-lens","argv":["fixture-transform"],"prompt_file":"fixtures/prompt.txt","timeout":5}},"mode":"ダミーデータ · ローカルCLI","interval":120}
+{"input": {"plugin": "file", "options": {"path": "fixtures/incremental-input.json"}}, "transform": {"plugin": "command", "options": {"command": "./task-lens", "argv": ["fixture-transform"], "prompt_file": "fixtures/prompt.txt", "timeout": 5, "quiet_seconds": 1}}, "mode": "ダミーデータ · ローカルCLI", "interval": 15}

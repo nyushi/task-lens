@@ -25,8 +25,11 @@ Herdr TUI設定のソケットとpane一覧を変更して使います。例の�
 ## 変換器
 
 外部CLIの実行ファイル、引数配列、プロンプトファイルを設定できます。
-stdinに入力JSONと前回状態を渡し、stdoutからTask JSONを受け取ります。
+担当別の画面差分と前回Taskだけをstdinに渡し、stdoutからTask JSONを受け取ります。
+初回の大量入力や送信予算超過は保留します。
 
+- [増分変換・予算](docs/incremental.md)
+- [合成15万字の検証結果](docs/incremental-test-results.md)
 - [設定](docs/configuration.md)
 - [Herdr TUI入力](docs/herdr-tui.md)
 - [入出力契約](docs/contract.md)
@@ -50,6 +53,6 @@ GitHub ActionsでmacOS / Linuxのテストと、両OSのamd64 / arm64バイナ�
 ## 制限
 
 状態はメモリ上にあり、再起動で消えます。Herdr入力は現在画面で、完全な会話履歴ではありません。
-増分変換、予算管理、待ち時間順ソート、編集・返信は未実装です。
+永続的な費用上限、完全な会話差分取得、待ち時間順ソート、編集・返信は未実装です。
 外部モデルを使う場合は、取得内容と前回状態の送信範囲を確認してください。
 公開サンプルには実データを含めていません。

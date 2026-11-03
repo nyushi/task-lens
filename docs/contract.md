@@ -2,20 +2,17 @@
 
 ## CLI入力
 
+外部commandはcontractVersion 2です。version 1の全担当一括送信は廃止しました。
+
 ```json
-{
-  "contractVersion": 1,
-  "prompt": "prompt_fileの全文",
-  "input": {"connected": true, "observations": []},
-  "previous": {
-    "tasks": {}, "roots": [], "sources": {},
-    "revision": 0, "connected": true, "error": null
-  }
-}
+{"contractVersion":2,"prompt":"...","input":{"source":{"id":"p1","revision":2},"namespace":"src-example:","change":{"kind":"screen_edit","prefixChars":10,"removedChars":0,"insertedText":"追加","suffixChars":0,"baseHash":"...","currentHash":"...","reset":false,"historyComplete":false}},"previous":{"tasks":{},"roots":[],"sources":{}}}
 ```
 
-[完全な入力例](../examples/input.json)は架空のHerdrデータです。
-変換器には現在の入力全体と前回のTaskストアを渡します。ログ差分だけを渡す方式ではありません。
+初回のchangeは`kind:snapshot`, `text`, `partial`, `historyComplete:false`です。
+変更後は画面置換を表し、全文や過去ログを再構成する保証はありません。previousは対象担当だけで根拠本文を除きます。
+`input.instructions`も実行時に添付されます。[予算・復旧仕様](incremental.md)を参照してください。
+[入力例](../examples/input.json)と[出力例](../examples/output.json)は同じnamespaceを使用します。
+出力は対象担当の完全なResultを返し、Task・Node・Source IDをnamespaceで始めます。Task/Node schema自体は従来どおりです。
 
 herdr-core observationの項目（TUIは[別仕様](herdr-tui.md)）：
 

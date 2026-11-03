@@ -44,6 +44,9 @@ func versionOf(b Batch) string {
 }
 func connected(b Batch) bool { v, _ := b["connected"].(bool); return v }
 func Tick(ctx context.Context, in Input, tr Transform, s *Store) (bool, error) {
+	if incremental, ok := tr.(*Incremental); ok {
+		return incremental.Tick(ctx, in, s)
+	}
 	b, err := in.Read(ctx)
 	if err != nil {
 		s.Observe("disconnected", false)

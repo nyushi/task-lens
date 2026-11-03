@@ -101,7 +101,11 @@ func makeTransform(c PluginConfig) (Transform, error) {
 		if e != nil {
 			return nil, e
 		}
-		return &CommandTransform{Options: o, Prompt: string(prompt)}, nil
+		var limits IncrementalOptions
+		if e := options(c.Options, &limits); e != nil {
+			return nil, e
+		}
+		return NewIncremental(&CommandTransform{Options: o, Prompt: string(prompt)}, limits)
 	default:
 		return nil, fmt.Errorf("unknown transform plugin %q", c.Plugin)
 	}
@@ -139,11 +143,19 @@ func webHandler(s *Store, port int, token, mode string) http.Handler {
 func fixtureCommand() error {
 	var envelope struct {
 		Input struct {
-			Fixture Result `json:"fixture"`
+			Fixture   Result `json:"fixture"`
+			Namespace string `json:"namespace"`
 		} `json:"input"`
 	}
 	if err := json.NewDecoder(io.LimitReader(os.Stdin, 8000000)).Decode(&envelope); err != nil {
 		return err
+	}
+	if ns := envelope.Input.Namespace; ns != "" {
+		r := emptyResult()
+		id := ns + "demo"
+		r.Tasks[id] = Task{ID: id, Purpose: str("架空のテスト"), State: "doing", Attention: "review", Tree: []Node{}}
+		r.Roots = append(r.Roots, id)
+		return json.NewEncoder(os.Stdout).Encode(r)
 	}
 	if err := Validate(envelope.Input.Fixture); err != nil {
 		return err

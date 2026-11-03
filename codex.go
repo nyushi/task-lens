@@ -13,8 +13,9 @@ import (
 // It only runs when explicitly selected as a CLI command.
 func codexTransform(ctx context.Context) error {
 	var envelope struct {
-		Prompt string `json:"prompt"`
-		Input  Batch  `json:"input"`
+		Prompt   string `json:"prompt"`
+		Input    Batch  `json:"input"`
+		Previous Result `json:"previous"`
 	}
 	if err := json.NewDecoder(io.LimitReader(os.Stdin, 8000000)).Decode(&envelope); err != nil {
 		return err
@@ -40,7 +41,8 @@ func codexTransform(ctx context.Context) error {
 	if err = os.WriteFile(schemaPath, raw, 0600); err != nil {
 		return err
 	}
-	input, _ := json.Marshal(envelope.Input)
+	input, _ := json.Marshal(map[string]any{"input": envelope.Input, "previous": envelope.Previous})
+	ns, _ := envelope.Input["namespace"].(string)
 	prompt := envelope.Prompt + "\nUse only the supplied input. Do not use tools, read files, or access network resources. Return only the schema JSON.\n" + string(input)
 	_, _, err = commandRun(ctx, CommandOptions{Command: "codex", Argv: []string{"exec", "--ignore-user-config", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check", "--cd", dir, "--output-schema", schemaPath, "--output-last-message", resultPath, "--color", "never", "-"}, Timeout: 120}, []byte(prompt))
 	if err != nil {
@@ -65,11 +67,11 @@ func codexTransform(ctx context.Context) error {
 	if err = decodeJSON(raw, &value); err != nil {
 		return err
 	}
-	task := Task{ID: "codex-task", Purpose: &value.Purpose, State: value.State, Attention: value.Attention, Tree: []Node{}}
+	task := Task{ID: ns + "codex-task", Purpose: &value.Purpose, State: value.State, Attention: value.Attention, Tree: []Node{}}
 	for _, n := range value.Nodes {
-		task.Tree = append(task.Tree, Node{ID: n.ID, State: n.State, Attention: n.Attention, Current: n.Current, SourceRefs: []string{"input"}, Content: Content{Kind: "text", Text: str(n.Text)}})
+		task.Tree = append(task.Tree, Node{ID: ns + n.ID, State: n.State, Attention: n.Attention, Current: n.Current, SourceRefs: []string{ns + "input"}, Content: Content{Kind: "text", Text: str(n.Text)}})
 	}
-	result := Result{Tasks: map[string]Task{task.ID: task}, Roots: []string{task.ID}, Sources: map[string]Source{"input": {"id": "input", "content": string(input)}}}
+	result := Result{Tasks: map[string]Task{task.ID: task}, Roots: []string{task.ID}, Sources: map[string]Source{ns + "input": {"id": "input", "content": string(input)}}}
 	if err = Validate(result); err != nil {
 		return err
 	}
