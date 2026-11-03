@@ -28,6 +28,9 @@ func (i *FileInput) Read(context.Context) (Batch, error) {
 		return nil, e
 	}
 	if i.Fixture {
+		if b, ok := v.(map[string]any); ok && b["fixture"] != nil {
+			return b, nil
+		}
 		return Batch{"connected": true, "fixture": v}, nil
 	}
 	b, ok := v.(map[string]any)
@@ -53,12 +56,44 @@ func (i *CommandInput) Close() error { return nil }
 
 type FixtureTransform struct{}
 
-func (FixtureTransform) Convert(_ context.Context, b Batch, _ Snapshot) (Result, error) {
+func fixtureResult(b Batch) (Result, map[string][]Ownership, error) {
 	raw, e := json.Marshal(b["fixture"])
-	var r Result
-	if e == nil {
-		e = decodeJSON(raw, &r)
+	var envelope struct {
+		Tasks   map[string]Task        `json:"tasks"`
+		Roots   []string               `json:"roots"`
+		Sources map[string]Source      `json:"sources"`
+		Owners  map[string][]Ownership `json:"owners,omitempty"`
 	}
+	if e == nil {
+		e = decodeJSON(raw, &envelope)
+	}
+	r := Result{Tasks: envelope.Tasks, Roots: envelope.Roots, Sources: envelope.Sources}
+	if e == nil {
+		e = Validate(r)
+	}
+	if e != nil {
+		return r, nil, e
+	}
+	for id, owners := range envelope.Owners {
+		if _, ok := r.Tasks[id]; !ok || len(owners) == 0 {
+			return r, nil, fmt.Errorf("invalid fixture owner task %q", id)
+		}
+		seen := map[Ownership]bool{}
+		for i, owner := range owners {
+			if owner.Scope == "" {
+				owner.Scope = "default"
+				owners[i] = owner
+			}
+			if owner.Source == "" || seen[owner] {
+				return r, nil, fmt.Errorf("invalid fixture owner for %q", id)
+			}
+			seen[owner] = true
+		}
+	}
+	return r, envelope.Owners, nil
+}
+func (FixtureTransform) Convert(_ context.Context, b Batch, _ Snapshot) (Result, error) {
+	r, _, e := fixtureResult(b)
 	return r, e
 }
 

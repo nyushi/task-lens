@@ -83,6 +83,10 @@ func Tick(ctx context.Context, in Input, tr Transform, s *Store) (bool, error) {
 	}
 	ok, err := s.Commit(previous.Revision, v, r)
 	if ok {
+		if _, yes := tr.(FixtureTransform); yes {
+			_, owners, _ := fixtureResult(b)
+			s.TrackFixtureOwners(r.Tasks, owners)
+		}
 		if _, yes := tr.(ObservationsOnly); yes {
 			owners := map[string]Ownership{}
 			all, _ := observations(b)

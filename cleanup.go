@@ -9,7 +9,10 @@ type CleanupOptions struct {
 	RemoveMissing       bool `json:"remove_missing"`
 	MissingAfterSeconds int  `json:"missing_after_seconds"`
 }
-type Ownership struct{ Source, Scope string }
+type Ownership struct {
+	Source string `json:"source_id"`
+	Scope  string `json:"scope"`
+}
 
 func scopeOf(o map[string]any) string {
 	scope, _ := o["scope"].(string)
@@ -30,7 +33,7 @@ func (s *Store) TrackOwners(owners map[string]Ownership) {
 	defer s.mu.Unlock()
 	for id, owner := range owners {
 		if _, ok := s.snapshot.Tasks[id]; ok {
-			s.owners[id] = owner
+			s.owners[id] = []Ownership{owner}
 		}
 	}
 }
@@ -47,10 +50,8 @@ func (s *Store) Reconcile(b Batch, now time.Time) map[string]bool {
 	}
 	scopes := completeMembership(b)
 	candidates := map[string]bool{}
-	for id, owner := range s.owners {
-		membership, complete := scopes[owner.Scope]
-		complete = complete && membership != nil
-		if !complete || membership[owner.Source] {
+	for id, owners := range s.owners {
+		if !allAbsent(owners, scopes) {
 			delete(s.missing, id)
 			continue
 		}
@@ -131,7 +132,7 @@ func (c CleanupOptions) validate() error {
 }
 
 func completeMembership(b Batch) map[string]map[string]bool {
-	obs, e := observations(b)
+	obs, e := membershipSources(b)
 	if e != nil || !connected(b) {
 		return map[string]map[string]bool{}
 	}
@@ -187,10 +188,63 @@ func (s *Store) UpdatePresence(b Batch) {
 	scopes := completeMembership(b)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for id, owner := range s.owners {
+	for id, owners := range s.owners {
+		if !allAbsent(owners, scopes) {
+			delete(s.missing, id)
+		}
+	}
+}
+
+func allAbsent(owners []Ownership, scopes map[string]map[string]bool) bool {
+	if len(owners) == 0 {
+		return false
+	}
+	for _, owner := range owners {
 		present := scopes[owner.Scope]
 		if present == nil || present[owner.Source] {
-			delete(s.missing, id)
+			return false
+		}
+	}
+	return true
+}
+
+func membershipSources(b Batch) (map[string]map[string]any, error) {
+	input := b
+	if _, ok := b["observations"]; !ok && b["fixture"] != nil {
+		input = clone(b)
+		input["observations"] = []any{}
+	}
+	obs, err := observations(input)
+	if err != nil {
+		return nil, err
+	}
+	if b["fixture"] == nil {
+		return obs, nil
+	}
+	_, owners, err := fixtureResult(b)
+	if err != nil {
+		return nil, err
+	}
+	for _, group := range owners {
+		for _, owner := range group {
+			if old := obs[owner.Source]; old != nil && scopeOf(old) != owner.Scope {
+				return nil, fmt.Errorf("source ID belongs to multiple scopes")
+			}
+			obs[owner.Source] = map[string]any{"id": owner.Source, "scope": owner.Scope}
+		}
+	}
+	return obs, nil
+}
+
+func (s *Store) TrackFixtureOwners(tasks map[string]Task, owners map[string][]Ownership) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id := range tasks {
+		// A present card without an owner declaration becomes unknown, never inferred.
+		delete(s.missing, id)
+		delete(s.owners, id)
+		if len(owners[id]) > 0 {
+			s.owners[id] = owners[id]
 		}
 	}
 }

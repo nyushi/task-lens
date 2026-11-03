@@ -153,12 +153,12 @@ type Store struct {
 	snapshot Snapshot
 	version  string
 	cleanup  CleanupOptions
-	owners   map[string]Ownership
+	owners   map[string][]Ownership
 	missing  map[string]time.Time
 }
 
 func NewStore() *Store {
-	return &Store{owners: map[string]Ownership{}, missing: map[string]time.Time{}, snapshot: Snapshot{Result: Result{Tasks: map[string]Task{}, Roots: []string{}, Sources: map[string]Source{}}}}
+	return &Store{owners: map[string][]Ownership{}, missing: map[string]time.Time{}, snapshot: Snapshot{Result: Result{Tasks: map[string]Task{}, Roots: []string{}, Sources: map[string]Source{}}}}
 }
 func (s *Store) Snapshot() Snapshot { s.mu.Lock(); defer s.mu.Unlock(); return clone(s.snapshot) }
 func (s *Store) Observe(version string, connected bool) bool {

@@ -36,8 +36,40 @@ observationsとsource_idsが一致しない、IDが重複、同一scopeの宣言
 あるscopeの一覧から、別scopeの担当を削除することはありません。
 
 Taskの所有者は`observations`変換器と担当別`command`スケジューラーが記録します。モデル出力のTask省略だけでは削除しません。
-所有者不明のfixture/recorded Taskは自動削除しません。再帰Taskも所有者単位で扱い、生存する別Taskから参照されるTaskは参照切れを防ぐため保持します。
+所有者を宣言しないfixture/recorded Taskは自動削除しません。再帰Taskも所有者単位で扱い、生存する別Taskから参照されるTaskは参照切れを防ぐため保持します。
 削除した担当の変換キャッシュも破棄し、次周期でカードが復活しないようにします。
 
 状態・所有関係・不在の待機時刻はメモリ上です。起動時は空で、前回起動のカードを読み込んで一斉削除する動作はありません。
 設定変更は再起動時に反映されます。再起動はTask状態とモデル送信予算もリセットします。
+
+## fixtureの所有者
+
+`fixture`変換器はツリーをそのまま取り込みます。任意の`fixture.owners`で、Task IDごとに所有者の配列を宣言できます。`source_id`は空でない担当ID、`scope`省略時は`default`です。TaskにないID、空の配列、重複した所有者はエラーになります。複数Taskで同じ所有者を共有できます。
+
+file/command入力の例（`transform.plugin: "fixture"`）：
+
+```json
+{
+  "connected": true,
+  "observations": [],
+  "source_snapshots": [
+    {"scope":"session-1","complete":true,"source_ids":["pane-a"]}
+  ],
+  "fixture": {
+    "tasks": {
+      "card-a": {"id":"card-a","purpose":"表示の調整","state":"doing","attention":"none","tree":[]}
+    },
+    "roots": ["card-a"],
+    "sources": {},
+    "owners": {"card-a":[{"source_id":"pane-a","scope":"session-1"}]}
+  }
+}
+```
+
+`input.plugin: "fixture"`のファイルもこの包み形式を受け付けます。従来の`tasks/roots/sources`だけのファイルは引き続き利用でき、所有者なしなら削除しません。包み形式では`connected:true`を明示してください。
+
+完全一覧の`source_ids`は、scope内のobservationsと今回のfixture所有者宣言の和集合に一致する必要があります。fixtureがある場合はobservationsを省略または空にできます。同じ担当IDを異なるscopeへ重複登録することはできません。`sources`は根拠データであり、所有者や生存一覧を推測するためには使いません。
+
+pane-aを閉じたら、今回のfixtureから`card-a`とそのownersを除き、同じscopeの完全一覧を`source_ids:[]`として送ります。最後のカードを閉じた場合は`tasks:{}, roots:[], sources:{}, owners:{}`です。前回のカードは猶予時間まで保持され、正常な完全取得が続けば期限後に消えます。他のscope、所有者不明、他Taskが参照するカードは保持します。
+
+共有Taskはownersに複数の担当を指定できます。すべての所有者のscopeが完全で、すべて不在の場合だけ猶予が進みます。いずれかが存在・不明・不完全なら待機をリセットします。現在のfixtureに再掲載したTaskは今回のownersで置換し、ownersを省略したTaskは所有者不明に戻します。今回掲載されなかったTaskの既存所有者は保持します。Task IDは入力全体で一意にしてください。
